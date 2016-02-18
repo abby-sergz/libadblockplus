@@ -1,0 +1,40 @@
+sudo: required
+dist: trusty
+
+python: '2.7'
+
+language: cpp
+
+addons:
+  apt:
+    sources:
+    - 'git-core'
+    - 'ubuntu-toolchain-r-test'
+    packages:
+    - g++-multilib
+    - binutils-gold
+    - libcurl4-openssl-dev
+    - git
+    - g++-6
+
+os:
+- linux
+
+env:
+  matrix:
+  - BUILD_ACTION=test
+  - BUILD_ACTION=android_arm ANDROID_NDK_ROOT=${TRAVIS_BUILD_DIR}/third_party/android-ndk-r10d
+  - BUILD_ACTION=android_x86 ANDROID_NDK_ROOT=${TRAVIS_BUILD_DIR}/third_party/android-ndk-r10d
+
+before_script:
+  - if [[ -z "$ANDROID_NDK_ROOT" ]]; then sudo update-alternatives --install /usr/bin/gcc gcc /usr/bin/gcc-6 999 --slave /usr/bin/g++ g++ /usr/bin/g++-6 ; fi
+  - ./ensure_dependencies.py
+  - if [[ -n "$ANDROID_NDK_ROOT" ]]; then wget http://dl.google.com/android/ndk/android-ndk-r10d-linux-x86_64.bin -O third_party/android-ndk-r10d-linux-x86_64.bin ; fi
+  - if [[ -n "$ANDROID_NDK_ROOT" ]]; then pushd third_party && chmod +x android-ndk-r10d-linux-x86_64.bin && ./android-ndk-r10d-linux-x86_64.bin > /dev/null && popd ; fi
+
+script:
+  - travis_wait bash .travis/build.android-x86-v8.sh 
+  - make ${BUILD_ACTION}
+
+notifications:
+  email: false
