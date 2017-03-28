@@ -227,6 +227,12 @@ AdblockPlus::JsValuePtr AdblockPlus::JsEngine::NewObject()
   return JsValuePtr(new JsValue(shared_from_this(), v8::Object::New()));
 }
 
+JsValuePtr JsEngine::NullValue()
+{
+  const JsContext context(shared_from_this());
+  return JsValuePtr(new JsValue(shared_from_this(), v8::Null()));
+}
+
 AdblockPlus::JsValuePtr AdblockPlus::JsEngine::NewCallback(
     v8::InvocationCallback callback)
 {

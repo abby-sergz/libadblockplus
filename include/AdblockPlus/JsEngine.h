@@ -186,6 +186,12 @@ namespace AdblockPlus
     JsValuePtr NewObject();
 
     /**
+     * Creates a null JavaScript object.
+     * @return New `JsValue` instance.
+     */
+    JsValuePtr NullValue();
+
+    /**
      * Creates a JavaScript function that invokes a C++ callback.
      * @param callback C++ callback to invoke. The callback receives a
      *        `v8::Arguments` object and can use `FromArguments()` to retrieve

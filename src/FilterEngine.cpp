@@ -417,8 +417,7 @@ void FilterEngine::SetPref(const std::string& pref, JsValuePtr value)
   JsValuePtr func = jsEngine->Evaluate("API.setPref");
   JsConstValueList params;
   params.push_back(jsEngine->NewValue(pref));
-  if (value)
-    params.push_back(value);
+  params.push_back(value);
   func->Call(params);
 }
 
@@ -485,13 +484,13 @@ void FilterEngine::RemoveFilterChangeCallback()
 
 void FilterEngine::SetAllowedConnectionType(const std::string* value)
 {
-  SetPref("allowed_connection_type", value ? jsEngine->NewValue(*value) : jsEngine->NewValue(""));
+  SetPref("allowed_connection_type", value ? jsEngine->NewValue(*value) : jsEngine->NullValue());
 }
 
 std::unique_ptr<std::string> FilterEngine::GetAllowedConnectionType() const
 {
    auto prefValue = GetPref("allowed_connection_type");
-   if (prefValue->AsString().empty())
+   if (prefValue->IsNull())
      return nullptr;
    return std::unique_ptr<std::string>(new std::string(prefValue->AsString()));
 }
