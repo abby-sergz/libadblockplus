@@ -10,12 +10,14 @@ addons:
     sources:
     - 'git-core'
     - 'ubuntu-toolchain-r-test'
+    - 'llvm-toolchain-precise-3.8'
     packages:
     - g++-multilib
     - binutils-gold
     - libcurl4-openssl-dev
     - git
     - g++-6
+    - clang-3.8
 
 os:
 - linux
@@ -23,17 +25,21 @@ os:
 env:
   matrix:
   - BUILD_ACTION=test
-  - BUILD_ACTION=android_arm ANDROID_NDK_ROOT=${TRAVIS_BUILD_DIR}/third_party/android-ndk-r10d
-  - BUILD_ACTION=android_x86 ANDROID_NDK_ROOT=${TRAVIS_BUILD_DIR}/third_party/android-ndk-r10d
+  - BUILD_ACTION=android_arm ANDROID_NDK_ROOT=${TRAVIS_BUILD_DIR}/third_party/android-ndk-r12b
+  - BUILD_ACTION=android_x86 ANDROID_NDK_ROOT=${TRAVIS_BUILD_DIR}/third_party/android-ndk-r12b
 
 before_script:
+  - unset CXX
+  - unset CC
+  - sudo update-alternatives --install /usr/bin/clang++ clang++ /usr/bin/clang++-3.8 999
+  - sudo update-alternatives --install /usr/bin/clang clang /usr/bin/clang-3.8 999
   - if [[ -z "$ANDROID_NDK_ROOT" ]]; then sudo update-alternatives --install /usr/bin/gcc gcc /usr/bin/gcc-6 999 --slave /usr/bin/g++ g++ /usr/bin/g++-6 ; fi
+  - if [[ -n "$ANDROID_NDK_ROOT" ]]; then wget https://dl.google.com/android/repository/android-ndk-r12b-linux-x86_64.zip -O third_party/android-ndk-r12b-linux-x86_64.zip ; fi
+  - if [[ -n "$ANDROID_NDK_ROOT" ]]; then pushd third_party && unzip android-ndk-r12b-linux-x86_64.zip > /dev/null && popd ; fi
   - ./ensure_dependencies.py
-  - if [[ -n "$ANDROID_NDK_ROOT" ]]; then wget http://dl.google.com/android/ndk/android-ndk-r10d-linux-x86_64.bin -O third_party/android-ndk-r10d-linux-x86_64.bin ; fi
-  - if [[ -n "$ANDROID_NDK_ROOT" ]]; then pushd third_party && chmod +x android-ndk-r10d-linux-x86_64.bin && ./android-ndk-r10d-linux-x86_64.bin > /dev/null && popd ; fi
 
 script:
-  - travis_wait bash .travis/build.android-x86-v8.sh 
+  - travis_wait 40 bash .travis/build-v8.sh 
   - make ${BUILD_ACTION}
 
 notifications:
