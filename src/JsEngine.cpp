@@ -112,6 +112,41 @@ JsEngine::JsWeakValuesList::~JsWeakValuesList()
 {
 }
 
+#include <v8-profiler.h>
+#include <fstream>
+class MyOutputStream : public v8::OutputStream {
+public:
+  MyOutputStream(const std::string& fileName)
+  {
+    m_file.open(fileName);
+  }
+  ~MyOutputStream() {
+    m_file.close();
+  }
+private:
+  // Inherited via OutputStream
+  void EndOfStream() override
+  {
+    m_file.flush();
+  }
+  WriteResult WriteAsciiChunk(char * data, int size) override
+  {
+    m_file.write(data, size);
+    return WriteResult::kContinue;
+  }
+  std::ofstream m_file;
+};
+
+void JsEngine::WriteHeapSnapshot(const std::string& fileName)
+{
+  const JsContext context(*this);
+  auto heapProfiler = GetIsolate()->GetHeapProfiler();
+  auto heapSnapshot = heapProfiler->TakeHeapSnapshot();
+  MyOutputStream output(fileName + ".heapsnapshot");
+  heapSnapshot->Serialize(&output);
+  const_cast<v8::HeapSnapshot*>(heapSnapshot)->Delete();
+}
+
 void JsEngine::NotifyLowMemory()
 {
   const JsContext context(*this);

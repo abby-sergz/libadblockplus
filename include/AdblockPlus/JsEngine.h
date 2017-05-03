@@ -82,6 +82,8 @@ namespace AdblockPlus
     };
     typedef std::list<JsWeakValuesList> JsWeakValuesLists;
   public:
+
+    void WriteHeapSnapshot(const std::string& fileName);
     /**
      * Event callback function.
      */
