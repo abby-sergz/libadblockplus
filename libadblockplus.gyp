@@ -227,6 +227,7 @@
       'test/DefaultFileSystem.cpp',
       'test/FileSystemJsObject.cpp',
       'test/FilterEngine.cpp',
+      'test/HeapSnapshot.cpp',
       'test/GlobalJsObject.cpp',
       'test/JsEngine.cpp',
       'test/JsValue.cpp',
