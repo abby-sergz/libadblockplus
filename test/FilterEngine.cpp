@@ -1017,3 +1017,19 @@ TEST_F(FilterEngineIsSubscriptionDownloadAllowedTest, ConfiguredConnectionTypeIs
     EXPECT_EQ(testConnection, capturedConnectionTypes[0].second);
   }
 }
+
+TEST(NewFilterEngineTest, MemoryLeak_NoCircularReferences)
+{
+  std::weak_ptr<AdblockPlus::JsEngine> weakJsEngine;
+  {
+    JsEngineCreationParameters jsEngineParams;
+    jsEngineParams.logSystem.reset(new LazyLogSystem());
+    jsEngineParams.fileSystem.reset(new LazyFileSystem());
+    jsEngineParams.timer.reset(new NoopTimer());
+    jsEngineParams.webRequest.reset(new NoopWebRequest());
+    auto jsEngine = CreateJsEngine(std::move(jsEngineParams));
+    weakJsEngine = jsEngine;
+    auto filterEngine = AdblockPlus::FilterEngine::Create(jsEngine);
+  }
+  EXPECT_FALSE(weakJsEngine.lock());
+}
