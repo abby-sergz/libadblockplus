@@ -52,6 +52,10 @@ namespace
     {
       v8::V8::InitializePlatform(platform);
       v8::V8::Initialize();
+      static std::string trace_gc = "--trace_gc";
+      v8::V8::SetFlagsFromString(trace_gc.c_str(), trace_gc.length());
+      static std::string trace_gc_v = "--trace-gc-verbose";
+      v8::V8::SetFlagsFromString(trace_gc_v.c_str(), trace_gc_v.length());
     }
 
     ~V8Initializer()
