@@ -221,6 +221,17 @@ void AdblockPlus::JsValue::SetProperty(const std::string& name, bool val)
   SetProperty(name, v8::Boolean::New(jsEngine->GetIsolate(), val));
 }
 
+void JsValue::SetProperty(const std::string& name, const std::vector<std::string>& values)
+{
+  JsContext context(*jsEngine);
+  auto isolate = jsEngine->GetIsolate();
+  auto jsValues = v8::Array::New(isolate, values.size());
+  for (size_t i = 0; i < values.size(); ++i) {
+    jsValues->Set(i, Utils::ToV8String(isolate, values[i]));
+  }
+  SetProperty(name, jsValues);
+}
+
 std::string AdblockPlus::JsValue::GetClass() const
 {
   if (!IsObject())

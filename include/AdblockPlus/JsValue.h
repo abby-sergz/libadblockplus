@@ -94,6 +94,7 @@ namespace AdblockPlus
     void SetProperty(const std::string& name, const std::string& val);
     void SetProperty(const std::string& name, int64_t val);
     void SetProperty(const std::string& name, bool val);
+    void SetProperty(const std::string& name, const std::vector<std::string>& value);
     void SetProperty(const std::string& name, const JsValue& value);
     inline void SetProperty(const std::string& name, const char* val)
     {
