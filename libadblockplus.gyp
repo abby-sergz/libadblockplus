@@ -169,6 +169,7 @@
           'lib/init.js',
           'adblockpluscore/lib/filterClasses.js',
           'adblockpluscore/lib/subscriptionClasses.js',
+          'adblockpluscore/lib/INIParser.js',
           'adblockpluscore/lib/filterStorage.js',
           'adblockpluscore/lib/elemHide.js',
           'adblockpluscore/lib/cssRules.js',

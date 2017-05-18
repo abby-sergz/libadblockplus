@@ -17,6 +17,12 @@
 
 #include <AdblockPlus.h>
 #include <gtest/gtest.h>
+#include <chrono>
+#include <thread>
+
+namespace AdblockPlus { namespace Utils {
+  std::string Slurp(std::istream& stream);
+}}
 
 using namespace AdblockPlus;
 namespace {
@@ -135,8 +141,12 @@ public:
         c = '-';
     }
     m_outputPrefix = testName + "-" + m_filterFiles;
-    m_jsEngine = JsEngine::New();
+    m_jsEngine = createJsEngine();
     m_latch = JSLatch::InstallLatch(*m_jsEngine);
+  }
+  virtual JsEnginePtr createJsEngine()
+  {
+    return JsEngine::New();
   }
 protected:
   void WriteHeapSnapshot(const std::string& afterStep) {
@@ -162,6 +172,10 @@ protected:
 INSTANTIATE_TEST_CASE_P(FilterStructures,
   HeapSnapshotTest, ::testing::Values("easylist.txt", "easylist+aa.txt", "exceptionrules.txt"));
 
+typedef HeapSnapshotTest HeapSnapshotPatternsTest;
+INSTANTIATE_TEST_CASE_P(INIParserStructures,
+  HeapSnapshotPatternsTest, ::testing::Values("patterns.ini"));
+
 TEST_P(HeapSnapshotTest, FilterClasses)
 {
   WriteHeapSnapshot("fresh");
@@ -177,7 +191,12 @@ TEST_P(HeapSnapshotTest, FilterClasses)
     "  unlockLatch();"
     "})");
   m_latch->wait();
+  std::cout << "before taking snapshot" << std::endl;
+  std::this_thread::sleep_for(std::chrono::seconds(100));
+  std::cout << "taking snapshot" << std::endl;
   WriteHeapSnapshot("done");
+  std::cout << "after taking snapshot" << std::endl;
+  std::this_thread::sleep_for(std::chrono::seconds(100));
 }
 
 TEST_P(HeapSnapshotTest, FilterClassesAndMatcher)
@@ -198,9 +217,9 @@ TEST_P(HeapSnapshotTest, FilterClassesAndMatcher)
     "let {defaultMatcher} = require(\"matcher\");"
     "let{ ElemHide } = require(\"elemHide\");"
     "let{ CSSRules } = require(\"cssRules\");"
-    "_fileSystem.read(\"" + m_filterFiles + "\", function(result){"
-    "  let data = result.content.split(/[\\r\\n]+/).slice(1);"
-    "  for (let line of data) {"
+    "function processLines(data) {"
+    "  for (let i = 0; i < data.length; ++i) {"
+    "    let line = data[i];"
     "    let filter = Filter.fromText(line);"
     "    if (filter instanceof RegExpFilter)"
     "      defaultMatcher.add(filter);"
@@ -209,8 +228,183 @@ TEST_P(HeapSnapshotTest, FilterClassesAndMatcher)
     "      else ElemHide.add(filter);"
     "    }"
     "  }"
+    "};"
+    "_fileSystem.readOpt(\"" + m_filterFiles + "\", function(result){"
+    "  let data = result.content;"
+    "  processLines(data);"
+    "  let data_ascii = result.content_ascii;"
+    "  processLines(data_ascii);"
     "  unlockLatch();"
     "})");
   m_latch->wait();
-  WriteHeapSnapshot("done");
+  std::cout << "before taking snapshot" << std::endl;
+  std::this_thread::sleep_for(std::chrono::seconds(20));
+  std::cout << "taking snapshot" << std::endl;
+  m_jsEngine->NotifyLowMemory();
+  //WriteHeapSnapshot("done");
+  std::cout << "after taking snapshot before notifying about low memory" << std::endl;
+  std::this_thread::sleep_for(std::chrono::seconds(20));
+  std::cout << "second notify" << std::endl;
+  m_jsEngine->NotifyLowMemory();
+  std::cout << "after low memory notification" << std::endl;
+  std::this_thread::sleep_for(std::chrono::seconds(20));
 }
+
+TEST_P(HeapSnapshotTest, BuildDomainStats)
+{
+  WriteHeapSnapshot("fresh");
+
+  evaluateFiles({ "compat.js",
+    "coreUtils.js",
+    "events.js",
+    "filterNotifier.js",
+    "filterClasses.js",
+    "matcher.js",
+    "elemHide.js",
+    "cssRules.js" });
+
+  WriteHeapSnapshot("abp-code");
+  m_jsEngine->Evaluate("let {Filter, RegExpFilter, ElemHideBase, CSSPropertyFilter} = require(\"filterClasses\");"
+    "let {defaultMatcher} = require(\"matcher\");"
+    "let{ ElemHide } = require(\"elemHide\");"
+    "let{ CSSRules } = require(\"cssRules\");"
+    "let domainCounter = new Map();"
+    "function processLines(data) {"
+    "  for (let i = 0; i < data.length; ++i) {"
+    "    let line = data[i];"
+    "    let filter = Filter.fromText(line);"
+    "    let domains = filter.domains;"
+    "    if (!domains) continue;"
+    "    for (let domain in domains) {"
+    "      let prevValue = domainCounter.get(domain);\n"
+    "      domainCounter.set(domain, prevValue ? prevValue + 1 : 1);\n"
+    "    }"
+    "  }"
+    "};"
+    "_fileSystem.readOpt(\"" + m_filterFiles + "\", function(result){"
+    "  let data = result.content;"
+    "  processLines(data);"
+    "  let data_ascii = result.content_ascii;"
+    "  processLines(data_ascii);\n"
+    "  console.log(JSON.stringify([...domainCounter]));"
+    "  unlockLatch();"
+    "})");
+  m_latch->wait();
+  std::cout << "before taking snapshot" << std::endl;
+  std::this_thread::sleep_for(std::chrono::seconds(20));
+  std::cout << "taking snapshot" << std::endl;
+  m_jsEngine->NotifyLowMemory();
+  //WriteHeapSnapshot("done");
+  std::cout << "after taking snapshot before notifying about low memory" << std::endl;
+  std::this_thread::sleep_for(std::chrono::seconds(20));
+  std::cout << "second notify" << std::endl;
+  m_jsEngine->NotifyLowMemory();
+  std::cout << "after low memory notification" << std::endl;
+  std::this_thread::sleep_for(std::chrono::seconds(20));
+}
+TEST_P(HeapSnapshotPatternsTest, FilterClassesAndMatcherAndIniParser)
+{
+  WriteHeapSnapshot("fresh");
+
+  evaluateFiles({ "compat.js",
+    "coreUtils.js",
+    "io.js",
+    "events.js",
+    "filterNotifier.js",
+    "filterClasses.js",
+    "subscriptionClasses.js",
+    "matcher.js",
+    "elemHide.js",
+    "cssRules.js",
+    "INIParser.js" });
+
+  WriteHeapSnapshot("abp-code");
+  m_jsEngine->Evaluate("let {Filter, RegExpFilter, ElemHideBase, CSSPropertyFilter} = require(\"filterClasses\");"
+    "let {defaultMatcher} = require(\"matcher\");"
+    "let {ElemHide} = require(\"elemHide\");"
+    "let {CSSRules} = require(\"cssRules\");"
+    "let {INIParser} = require(\"INIParser\");"
+    "let {IO} = require(\"io\");"
+    "let parser = new INIParser();"
+    "IO.readFromFile({ path: \"" + m_filterFiles + "\" }, parser, function(result){"
+    "  console.log(result);"
+    "  unlockLatch();"
+    "})");
+  m_latch->wait();
+  std::cout << "before taking snapshot" << std::endl;
+  std::this_thread::sleep_for(std::chrono::seconds(20));
+  std::cout << "taking snapshot" << std::endl;
+  m_jsEngine->NotifyLowMemory();
+  WriteHeapSnapshot("done");
+  std::cout << "after taking snapshot before notifying about low memory" << std::endl;
+  std::this_thread::sleep_for(std::chrono::seconds(20));
+  std::cout << "second notify" << std::endl;
+  m_jsEngine->NotifyLowMemory();
+  std::cout << "after low memory notification" << std::endl;
+  std::this_thread::sleep_for(std::chrono::seconds(20));
+}
+
+namespace {
+  class ProfileFileSystem : public AdblockPlus::FileSystem
+  {
+  public:
+    explicit ProfileFileSystem(const AdblockPlus::FileSystemPtr& fs)
+    : m_fs(fs)
+    , m_writePatternsIniCounter(0)
+    {
+      m_fakePatternsIniPath = "/sdcard/patterns.ini";
+      auto fakePatternsIniStat = m_fs->Stat(m_fakePatternsIniPath);
+      if (!fakePatternsIniStat.exists || !fakePatternsIniStat.isFile)
+        m_fakePatternsIniPath.clear();
+    }
+    std::shared_ptr<std::istream> Read(const std::string& path) const override {
+      bool useFakePatternsIni = isPatternsIniPath(path) && !m_fakePatternsIniPath.empty();
+      return m_fs->Read(useFakePatternsIni ? m_fakePatternsIniPath : path);
+    }
+    void Write(const std::string& path, std::istream& data) override {
+      auto content = AdblockPlus::Utils::Slurp(data);
+      if (isPatternsIniPath(path)) {
+        std::stringstream ss;
+        ss << content;
+        m_fs->Write("/sdcard/patterns.ini-write-" + std::to_string(m_writePatternsIniCounter++), ss);
+      }
+      std::stringstream ss;
+      ss << content;
+      ss.flush();
+      m_fs->Write(path, ss);
+    }
+    void Move(const std::string& fromPath, const std::string& toPath) override {
+      m_fs->Move(fromPath, toPath);
+    }
+    void Remove(const std::string& path) override {
+      m_fs->Remove(path);
+    }
+    StatResult Stat(const std::string& path) const override {
+      return m_fs->Stat(path);
+    }
+    std::string Resolve(const std::string& path) const override {
+      return m_fs->Resolve(path);
+    }
+  private:
+    bool isPatternsIniPath(const std::string& path) const {
+      return path.find("patterns.ini") != std::string::npos;
+    }
+  private:
+    AdblockPlus::FileSystemPtr m_fs;
+    std::string m_fakePatternsIniPath;
+    uint32_t m_writePatternsIniCounter;
+  };
+}
+
+class FilterEngineProfileTest : public HeapSnapshotTest
+{
+  typedef HeapSnapshotTest super;
+  void SetUp() override {
+    super::SetUp();
+  }
+  JsEnginePtr createJsEngine() override {
+    auto jsEngine = super::createJsEngine();
+    return jsEngine;
+  }
+};
+
