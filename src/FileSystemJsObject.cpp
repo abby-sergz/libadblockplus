@@ -50,19 +50,43 @@ namespace
   {
   public:
     ReadThread(const JsEnginePtr& jsEngine, const JsValue& callback,
-               const std::string& path)
-      : IoThread(jsEngine, callback), path(path)
+               const std::string& path, bool opt = false)
+      : IoThread(jsEngine, callback), path(path), m_opt(opt)
     {
     }
 
     void Run()
     {
       std::string content;
+      std::string content_ascii;
       std::string error;
+      std::vector<std::string> ss;
+      std::vector<std::string> ss_ascii;
       try
       {
         std::shared_ptr<std::istream> stream = fileSystem->Read(path);
-        content = Utils::Slurp(*stream);
+        if (m_opt)
+        {
+          std::vector<std::string>* ss_current = nullptr;
+          std::string line;
+          while(std::getline(*stream, line))
+          {
+            ss_current = &ss_ascii;
+            for (const auto c : line)
+            {
+              if (c > 127)
+              {
+                ss_current = &ss;
+                break;
+              }
+            }
+            ss_current->push_back(line);
+          }
+        }
+        else
+        {
+          content = Utils::Slurp(*stream);
+        }
       }
       catch (std::exception& e)
       {
@@ -75,7 +99,12 @@ namespace
 
       const JsContext context(*jsEngine);
       auto result = jsEngine->NewObject();
-      result.SetProperty("content", content);
+      if (m_opt)
+      {
+        result.SetProperty("content_ascii", ss_ascii);
+        result.SetProperty("content", ss);
+      } else
+        result.SetProperty("content", content);
       result.SetProperty("error", error);
       JsValueList params;
       params.push_back(result);
@@ -84,6 +113,7 @@ namespace
 
   private:
     std::string path;
+    bool m_opt;
   };
 
   class WriteThread : public IoThread
@@ -257,6 +287,21 @@ namespace
     readThread->Start();
   }
 
+  void ReadOptCallback(const v8::FunctionCallbackInfo<v8::Value>& arguments)
+  {
+    AdblockPlus::JsEnginePtr jsEngine = AdblockPlus::JsEngine::FromArguments(arguments);
+    AdblockPlus::JsValueList converted = jsEngine->ConvertArguments(arguments);
+
+    v8::Isolate* isolate = arguments.GetIsolate();
+    if (converted.size() != 2)
+      return ThrowException(isolate, "_fileSystem.read requires 2 parameters");
+    if (!converted[1].IsFunction())
+      return ThrowException(isolate, "Second argument to _fileSystem.read must be a function");
+    ReadThread* const readThread = new ReadThread(jsEngine, converted[1],
+        converted[0].AsString(), true);
+    readThread->Start();
+  }
+
   void WriteCallback(const v8::FunctionCallbackInfo<v8::Value>& arguments)
   {
     AdblockPlus::JsEnginePtr jsEngine = AdblockPlus::JsEngine::FromArguments(arguments);
@@ -335,6 +380,7 @@ namespace
 JsValue& FileSystemJsObject::Setup(JsEngine& jsEngine, JsValue& obj)
 {
   obj.SetProperty("read", jsEngine.NewCallback(::ReadCallback));
+  obj.SetProperty("readOpt", jsEngine.NewCallback(::ReadOptCallback));
   obj.SetProperty("write", jsEngine.NewCallback(::WriteCallback));
   obj.SetProperty("move", jsEngine.NewCallback(::MoveCallback));
   obj.SetProperty("remove", jsEngine.NewCallback(::RemoveCallback));
