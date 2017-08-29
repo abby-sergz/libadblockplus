@@ -24,6 +24,7 @@
 #include "FileSystemJsObject.h"
 #include "JsContext.h"
 #include "Utils.h"
+#include "JsError.h"
 #include <AdblockPlus/Platform.h>
 
 using namespace AdblockPlus;
@@ -61,6 +62,74 @@ namespace
           result.SetProperty("error", error);
         jsEngine->TakeJsValues(weakCallback)[0].Call(result);
       });
+  }
+
+  void ReadFromFileCallback(const v8::FunctionCallbackInfo<v8::Value>& arguments)
+  {
+    AdblockPlus::JsEnginePtr jsEngine = AdblockPlus::JsEngine::FromArguments(arguments);
+    AdblockPlus::JsValueList converted = jsEngine->ConvertArguments(arguments);
+
+    v8::Isolate* isolate = arguments.GetIsolate();
+    if (converted.size() != 3)
+      return ThrowExceptionInJS(isolate, "_fileSystem.readFromFile requires 3 parameters");
+    if (!converted[1].IsFunction())
+      return ThrowExceptionInJS(isolate, "Second argument to _fileSystem.readFromFile must be a function (listener callback)");
+    if (!converted[2].IsFunction())
+      return ThrowExceptionInJS(isolate, "Third argument to _fileSystem.readFromFile must be a function (done callback)");
+
+    JsValueList values;
+    values.push_back(converted[1]);
+    values.push_back(converted[2]);
+    auto weakCallback = jsEngine->StoreJsValues(values);
+    std::weak_ptr<JsEngine> weakJsEngine = jsEngine;
+    jsEngine->GetPlatform().GetFileSystem().Read(converted[0].AsString(),
+      [weakJsEngine, weakCallback]
+    (IFileSystem::IOBuffer&& content, const std::string& error)
+    {
+      auto jsEngine = weakJsEngine.lock();
+      if (!jsEngine)
+        return;
+
+      const JsContext context(*jsEngine);
+
+      auto jsValues = jsEngine->TakeJsValues(weakCallback);
+      if (!error.empty())
+      {
+        jsValues[1].Call(jsEngine->NewValue(error));
+        return;
+      }
+
+      auto processFunc = jsValues[0].UnwrapValue().As<v8::Function>();
+
+      auto globalContext = context.GetV8Context()->Global();
+      if (!globalContext->IsObject())
+        throw std::runtime_error("`this` pointer has to be an object");
+
+      const v8::TryCatch tryCatch;
+
+      const auto cend = content.cend();
+      auto begin = content.begin();
+      auto end = begin;
+      while (begin != cend)
+      {
+        if (end == cend || *end == 10 || *end == 13)
+        {
+          if (std::distance(begin, end) != 1) // no empty lines
+          {
+            auto jsLine = Utils::StringBufferToV8String(jsEngine->GetIsolate(), StringBuffer(begin, end)).As<v8::Value>();
+            processFunc->Call(globalContext, 1, &jsLine);
+            if (tryCatch.HasCaught())
+              return ThrowExceptionInJS(jsEngine->GetIsolate(), JsError::ExceptionToString(tryCatch.Exception(), tryCatch.Message()));
+          }
+          if (end != cend)
+            ++end;
+          begin = end;
+        }
+        if (end != cend)
+          ++end;
+      }
+      jsValues[1].Call();
+    });
   }
 
   void WriteCallback(const v8::FunctionCallbackInfo<v8::Value>& arguments)
@@ -198,6 +267,7 @@ namespace
 JsValue& FileSystemJsObject::Setup(JsEngine& jsEngine, JsValue& obj)
 {
   obj.SetProperty("read", jsEngine.NewCallback(::ReadCallback));
+  obj.SetProperty("readFromFile", jsEngine.NewCallback(::ReadFromFileCallback));
   obj.SetProperty("write", jsEngine.NewCallback(::WriteCallback));
   obj.SetProperty("move", jsEngine.NewCallback(::MoveCallback));
   obj.SetProperty("remove", jsEngine.NewCallback(::RemoveCallback));
