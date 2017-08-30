@@ -105,6 +105,19 @@ public:
     BaseHeapSnapshotTest::SetUp();
   }
 protected:
+  void waitFor(const std::string& msg, int seconds) {
+    if (!m_prevStep.empty())
+      std::cout << m_prevStep << " has finished" << std::endl;
+    std::cout << "make dump of " << msg << std::endl;
+    while (seconds-- > 0)
+    {
+      std::cout << " " << seconds;
+      std::cout.flush();
+      std::this_thread::sleep_for(std::chrono::seconds(1));
+    }
+    std::cout << '\n' << std::endl;
+  }
+
   void WriteHeapSnapshot(const std::string& afterStep) {
     platform->GetJsEngine().WriteHeapSnapshot(m_outputPrefix + "." + afterStep);
   }
@@ -122,6 +135,7 @@ protected:
   }
   std::string m_outputPrefix;
   std::string m_filterFiles;
+  std::string m_prevStep;
 };
 
 INSTANTIATE_TEST_CASE_P(FilterStructures,
@@ -145,21 +159,9 @@ TEST_P(HeapSnapshotTest, DISABLED_FilterClasses)
   WriteHeapSnapshot("done");
 }
 
-namespace
-{
-  void waitFor(const std::string& msg, int seconds) {
-    std::cout << "before " << msg << std::endl;
-    while (seconds-- > 0)
-    {
-      std::cout << " " << seconds;
-      std::this_thread::sleep_for(std::chrono::seconds(1));
-    }
-    std::cout << '\n' << msg << std::endl;
-  }
-}
-
 TEST_P(HeapSnapshotTest, DISABLED_FilterClassesAndMatcher)
 {
+  waitFor("fresh", 10);
   WriteHeapSnapshot("fresh");
 
   evaluateFiles({ "compat.js",
@@ -173,28 +175,63 @@ TEST_P(HeapSnapshotTest, DISABLED_FilterClassesAndMatcher)
     "elemHide.js",
     "elemHideEmulation.js" });
 
+  waitFor("js files", 10);
   WriteHeapSnapshot("abp-code");
+
   auto& jsEngine = platform->GetJsEngine();
-  jsEngine.Evaluate(R"js((function(filterFile){
-  const {IO} = require("io");
+  jsEngine.Evaluate(R"js(
   const {Filter, RegExpFilter, ElemHideBase, ElemHideEmulationFilter} = require("filterClasses");
   const {defaultMatcher} = require("matcher");
-  const {ElemHide} = require("elemHide");
   const {ElemHideEmulation} = require("elemHideEmulation");
+  let lines = [];
+  let filters = [];
+  let elemHideFilters = [];
+(function(filterFile){
+  const {IO} = require("io");
   IO.readFromFile(filterFile, function(line) {
-    let filter = Filter.fromText(line);
+      lines.push(line);
+    }
+  );
+}))js").Call(jsEngine.NewValue(m_filterFiles));
+  waitFor("lines are read", 10);
+  WriteHeapSnapshot("only-lines");
+  jsEngine.Evaluate(R"js(
+  for (let line of lines)
+  {
+    filters.push(Filter.fromText(line));
+  }
+  lines = [];
+)js");
+  waitFor("filters are created", 10);
+  WriteHeapSnapshot("only-filters");
+  waitFor("after dump (GC)", 10);
+  jsEngine.Evaluate(R"js(
+  for (let filter of filters)
+  {
     if (filter instanceof RegExpFilter)
       defaultMatcher.add(filter);
     else if (filter instanceof ElemHideBase) {
       if (filter instanceof ElemHideEmulationFilter)
         ElemHideEmulation.add(filter);
       else
-       ElemHide.add(filter);
+       elemHideFilters.push(filter);
     }
-  });
-}))js").Call(jsEngine.NewValue(m_filterFiles));
-  waitFor("GC", 10);
+  }
+  filters = [];
+)js");
+  waitFor("matcher", 10);
+  WriteHeapSnapshot("filters-matcher");
+  waitFor("after dump (GC)", 10);
+  jsEngine.Evaluate(R"js(
+  const {ElemHide} = require("elemHide");
+  for (let filter of elemHideFilters)
+  {
+    ElemHide.add(filter);
+  }
+  elemHideFilters = [];
+)js");
+  waitFor("ElemHide.add done", 10);
   jsEngine.NotifyLowMemory();
-  waitFor("HEAP snapshot", 10);
+  waitFor("GC run", 10);
   WriteHeapSnapshot("done");
 }
