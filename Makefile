@@ -58,6 +58,8 @@ endif
 
 TEST_EXECUTABLE = ${BUILD_DIR}/out/Debug/tests
 
+URL_PREFIX ?= "https://v8.eyeofiles.com/v8-4fc9a2fe7f8a7ef1e7966185b39b3b541792669a/"
+
 .PHONY: all test clean docs ensure_dependencies
 
 .DEFAULT_GOAL:=all
@@ -76,7 +78,7 @@ docs:
 	doxygen
 
 get-prebuilt-v8:
-	URL_PREFIX="https://v8.eyeofiles.com/v8-4fc9a2fe7f8a7ef1e7966185b39b3b541792669a/" \
+	URL_PREFIX=${URL_PREFIX} \
 	TARGET_OS=${TARGET_OS} ABP_TARGET_ARCH=${ABP_TARGET_ARCH} \
 	TRAVIS_OS_NAME=${TRAVIS_OS_NAME} Configuration=${Configuration} \
 	bash .travis/prepare-prebuilt-v8.sh
@@ -85,11 +87,11 @@ clean:
 	$(RM) -r ${BUILD_DIR} docs
 
 ifeq ($(TARGET_OS),android)
-SUB_ACTION ?= installed_modules
+GYP_FILE ?= tests.gyp
 all: ensure_dependencies
 	GYP_DEFINES="${GYP_PARAMETERS}" \
-	python ./make_gyp_wrapper.py --depth=. -f make-android -Ilibadblockplus.gypi --generator-output=${BUILD_DIR} -Gandroid_ndk_version=r16b libadblockplus.gyp
-	$(ANDROID_NDK_ROOT)/ndk-build -C ${BUILD_DIR} ${SUB_ACTION} \
+	python ./make_gyp_wrapper.py --depth=. -f make-android -Ilibadblockplus.gypi --generator-output=${BUILD_DIR} -Gandroid_ndk_version=r16b ${GYP_FILE}
+	$(ANDROID_NDK_ROOT)/ndk-build -C ${BUILD_DIR} installed_modules \
 	BUILDTYPE=Release \
 	APP_ABI=$(ANDROID_ABI) \
 	APP_PLATFORM=${ANDROID_PLATFORM_LEVEL} \
@@ -106,7 +108,7 @@ ifdef CXX
 CXX_PARAM:=CXX=${CXX}
 endif
 all: ensure_dependencies 
-	GYP_DEFINES="${GYP_PARAMETERS}" third_party/gyp/gyp --depth=. -f make -I libadblockplus.gypi --generator-output=${BUILD_DIR} libadblockplus.gyp
+	GYP_DEFINES="${GYP_PARAMETERS}" third_party/gyp/gyp --depth=. -f make -I libadblockplus.gypi --generator-output=${BUILD_DIR} abpshell.gyp tests.gyp
 	$(MAKE) -C ${BUILD_DIR} ${SUB_ACTION} ${CXX_PARAM}
 
 endif
