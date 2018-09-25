@@ -3,7 +3,6 @@
 set -x
 set -e
 
-export URL_PREFIX=${URL_PREFIX}
 export Configuration=release
 export TARGET_OS=android
 ABP_TARGET_ARCHES=("arm" "arm64" "ia32")
