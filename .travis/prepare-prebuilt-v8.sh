@@ -3,7 +3,7 @@
 set -x
 set -e
 
-source "${BASH_SOURCE%/*}/prepare-v8-headers.sh"
+bash "${BASH_SOURCE%/*}/prepare-v8-headers.sh"
 
 PREBUILT_V8_ARCHIVE=${TARGET_OS}-${ABP_TARGET_ARCH}-${Configuration}.tar.xz
 
